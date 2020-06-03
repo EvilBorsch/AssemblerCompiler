@@ -133,11 +133,10 @@ void print_mnem_table(Hash_Table *table) {
             mnem_node *data = (mnem_node *) node->data;
             printf("%s", data->operator);
             printf(" Директива? %d ", data->is_direct);
-            if (data->is_direct==0){
-                printf("Информация: %d ",data->nonDirectInfo->info);
-                printf("Размер: %d ",data->nonDirectInfo->size);
-            }
-            else{
+            if (data->is_direct == 0) {
+                printf("Информация: %d ", data->nonDirectInfo->info);
+                printf("Размер: %d ", data->nonDirectInfo->size);
+            } else {
                 printf("Есть функция для обработки");
             }
             if (node->next != NULL) {
@@ -155,12 +154,11 @@ mnem_node *find(Hash_Table *table, char *key) {
         list_node *node = table->list[i]->el;
         while (node != NULL) {
             mnem_node *data = (mnem_node *) node->data;
-            if (data->operator == key) {
+            if (strcmp(data->operator, key) == 0) {
                 return data;
             }
             node = node->next;
         }
-        printf("\n");
     }
     return NULL;
 }
@@ -199,8 +197,166 @@ void resw(size_t *c, char *operand) {
     *c += wordSize * strtol(operand, NULL, 0);
 }
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
 
-int main() {
+void parseString(char *buf, int numOfStr, Hash_Table *pTable);
+
+void printResult(char *metkaStr, char *operatorStr, char *operandStr, char *commentStr, int numOfStr);
+
+bool checkIfOperatorCorrect(char *str);
+
+char commentSymbol = ';';
+
+
+void appending(char *cArr, const char c) {
+    unsigned long len = strlen(cArr);
+    cArr[len] = c;
+
+}
+
+bool isEmpty(const char *str) {
+    return str == NULL || str[0] == '\0';
+}
+
+void parseString(char *buf, int numOfStr, Hash_Table *mnem_table) {
+    int i = 0;
+    const int lenOf = strlen(buf);
+    char ch;
+    if (buf[0] == '\n') {
+        printResult(NULL, NULL, NULL, NULL, numOfStr);
+        return;
+    }
+    //// нахождение метки
+    char *metkaStr = (char *) malloc(lenOf * sizeof(char));
+    if (buf[0] != ' ' && buf[0] != commentSymbol) {
+        for (i; i < lenOf; i++) {
+            ch = buf[i];
+            if (ch == ' ') break;
+            appending(metkaStr, ch);
+
+        }
+        i++;
+    }
+
+    //////////
+
+    ch = buf[i];
+    //// нахождение первого слова
+    while (ch == ' ' && i < lenOf) {
+        i++;
+        ch = buf[i];
+    }
+    ////
+
+    char *tempStr = (char *) malloc(lenOf * sizeof(char));
+    char *operatorStr = (char *) malloc(lenOf * sizeof(char));
+    char *operandStr = (char *) malloc(lenOf * sizeof(char));
+    char *commentStr = (char *) malloc(lenOf * sizeof(char));
+    bool nextOperand = false;
+    for (i; i < lenOf; i++) {
+        ch = buf[i];
+        if (ch == ' ' || ch == '\n') {
+            if (tempStr[0] == commentSymbol) {
+                commentStr = ++tempStr;
+                tempStr = (char *) malloc(lenOf * sizeof(char));
+                continue;
+            }
+            if (nextOperand) {
+                operandStr = tempStr;
+                tempStr = (char *) malloc(lenOf * sizeof(char));
+                continue;
+            }
+
+            if (checkIfOperatorCorrect(tempStr)) {
+                operatorStr = tempStr;
+                nextOperand = true;
+            }
+            tempStr = (char *) malloc(lenOf * sizeof(char));
+            continue;
+
+        }
+        appending(tempStr, ch);
+    }
+    if (isEmpty(operatorStr) && isEmpty(operandStr)) {
+        operatorStr = tempStr;
+    }
+    if (!isEmpty(operatorStr) && isEmpty(operandStr)) operandStr = tempStr;
+    if (operatorStr == operandStr) operandStr = NULL;
+
+
+    printResult(metkaStr, operatorStr, operandStr, commentStr, numOfStr);
+    mnem_node *res = find(mnem_table, operatorStr);
+    res->worker(&counter, operandStr);
+    if (res->is_direct == 1) {
+        printf("Значение Counter: %zu\n", counter);
+    }
+    metkaStr = NULL;
+    free(metkaStr);
+    operatorStr = NULL;
+    free(operatorStr);
+    tempStr = NULL;
+    free(tempStr);
+    commentStr = NULL;
+    free(commentStr);
+
+
+}
+
+bool checkIfOperatorCorrect(char *str) {
+    if (strcmp(str, "START") == 0 || strcmp(str, "END") == 0 || strcmp(str, "BYTE") == 0 || strcmp(str, "WORD") == 0 ||
+        strcmp(str, "RESB") == 0 || strcmp(str, "RESW") == 0 || strcmp(str, "mov") == 0 || strcmp(str, "ret") == 0 ||
+        strcmp(str, "int") == 0) {
+        return true;
+    }
+    return false;
+}
+
+
+void printDataWithMessage(const char *message, char *data) {
+    printf("%s", message);
+    if (data != NULL) {
+        printf("%s", data);
+    }
+
+}
+
+void printResult(char *metkaStr, char *operatorStr, char *operandStr, char *commentStr, int numOfStr) {
+    printf("%d", numOfStr);
+    printf("%s", ") ");
+    printDataWithMessage("Метка: ", metkaStr);
+    printDataWithMessage(" Оператор: ", operatorStr);
+    printDataWithMessage(" Операнд: ", operandStr);
+    printDataWithMessage(" Комментарий: ", commentStr);
+    printf("\n");
+}
+
+
+void parse_file(Hash_Table *table) {
+    int numberOfStr = 1;
+    const char *pathToFile = "../program.txt";
+    char *line_buf = (char *) malloc(255 * sizeof(char));
+    size_t line_buf_size = 0;
+    ssize_t line_size;
+    FILE *fp = fopen(pathToFile, "r");
+    if (!fp) {
+        fprintf(stderr, "Error opening file '%s'\n", "program.txt");
+        return;
+    }
+    line_size = getline(&line_buf, &line_buf_size, fp);
+    while (line_size >= 0) {
+        parseString(line_buf, numberOfStr, table);
+        numberOfStr++;
+        line_size = getline(&line_buf, &line_buf_size, fp);
+    }
+    line_buf = NULL;
+    free(line_buf);
+    fclose(fp);
+}
+
+int main(void) {
     ////////////////////////// Создание таблицы мнемоник
     Hash_Table *table = create_hash_table(17);
     mnem_node node = {
@@ -263,9 +419,79 @@ int main() {
     push_to_table(table, &node8);
     ////////////////////////////////////
 
-    print_mnem_table(table);
-
-
-
-
+    parse_file(table);
+    return EXIT_SUCCESS;
 }
+
+
+
+
+//int main() {
+//    ////////////////////////// Создание таблицы мнемоник
+//    Hash_Table *table = create_hash_table(17);
+//    mnem_node node = {
+//            "START",
+//            1,
+//            start,
+//    };
+//    mnem_node node2 = {
+//            "END",
+//            1,
+//            end,
+//    };
+//    mnem_node node3 = {
+//            "BYTE",
+//            1,
+//            byte,
+//    };
+//
+//    mnem_node node4 = {
+//            "WORD",
+//            1,
+//            word,
+//    };
+//
+//    mnem_node node5 = {
+//            "RESW",
+//            1,
+//            resw,
+//    };
+//
+//    mnem_node node6 = {
+//            "RESB",
+//            1,
+//            resb,
+//    };
+//    non_direct_info *info1 = calloc(sizeof(non_direct_info *), 1);
+//    info1->info = 1;
+//    info1->size = 3;
+//    mnem_node node7 = {
+//            "int",
+//            0,
+//            info1,
+//    };
+//    non_direct_info *info2 = calloc(sizeof(non_direct_info *), 1);
+//    info2->info = 2;
+//    info2->size = 3;
+//    mnem_node node8 = {
+//            "move",
+//            0,
+//            info2,
+//    };
+//
+//    push_to_table(table, &node);
+//    push_to_table(table, &node2);
+//    push_to_table(table, &node3);
+//    push_to_table(table, &node4);
+//    push_to_table(table, &node5);
+//    push_to_table(table, &node6);
+//    push_to_table(table, &node7);
+//    push_to_table(table, &node8);
+//    ////////////////////////////////////
+//
+//    print_mnem_table(table);
+//
+//
+//
+//
+//}

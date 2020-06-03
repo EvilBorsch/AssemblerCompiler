@@ -1,0 +1,6 @@
+ START 1000
+st: BYTE 7
+m1: WORD 5
+m2: RESB 8
+m3: RESW 2
+ END st
