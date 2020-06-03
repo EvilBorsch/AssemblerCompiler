@@ -1,0 +1,10 @@
+ START ;nach op
+;SPO
+     WORD 5
+test WORD 6
+ WORD 20
+
+last WRONGCOMMAND 5
+    int 10
+    ret
+ END
