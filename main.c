@@ -23,6 +23,13 @@ typedef struct mnem_node {
     };
 } mnem_node;
 
+
+typedef struct name_node {
+    char *name;
+    bool tag;
+    int addr;
+} name_node;
+
 /* Определяем элемент списка */
 typedef struct list_node {
     struct list_node *next;
@@ -123,6 +130,12 @@ void push_to_table(Hash_Table *table, mnem_node *el) {
     push_back(table->list[index], el);
 }
 
+
+void push_to_name_table(Hash_Table *table, name_node *el) {
+    unsigned int index = hash(el->name, table->size);
+    push_back(table->list[index], el);
+}
+
 void print_mnem_table(Hash_Table *table) {
 
     for (int i = 0; i < table->size; i++) {
@@ -139,6 +152,27 @@ void print_mnem_table(Hash_Table *table) {
             } else {
                 printf("Есть функция для обработки");
             }
+            if (node->next != NULL) {
+                printf("%s", "->");
+            }
+            node = node->next;
+        }
+        printf("\n");
+    }
+}
+
+
+void print_name_table(Hash_Table *table) {
+
+    for (int i = 0; i < table->size; i++) {
+        printf("%s", "index № ");
+        printf(":%d ", i);
+        list_node *node = table->list[i]->el;
+        while (node != NULL) {
+            name_node *data = (name_node *) node->data;
+            printf(" Имя %s ", data->name);
+            printf(" Признак %d ", data->tag);
+            printf(" Адресс %d ", data->addr);
             if (node->next != NULL) {
                 printf("%s", "->");
             }
@@ -197,12 +231,8 @@ void resw(size_t *c, char *operand) {
     *c += wordSize * strtol(operand, NULL, 0);
 }
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
 
-void parseString(char *buf, int numOfStr, Hash_Table *pTable);
+void parseString(char *buf, int numOfStr, Hash_Table *pTable, Hash_Table *name_table);
 
 void printResult(char *metkaStr, char *operatorStr, char *operandStr, char *commentStr, int numOfStr);
 
@@ -221,7 +251,7 @@ bool isEmpty(const char *str) {
     return str == NULL || str[0] == '\0';
 }
 
-void parseString(char *buf, int numOfStr, Hash_Table *mnem_table) {
+void parseString(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *name_table) {
     int i = 0;
     const int lenOf = strlen(buf);
     char ch;
@@ -293,6 +323,17 @@ void parseString(char *buf, int numOfStr, Hash_Table *mnem_table) {
     if (res->is_direct == 1) {
         printf("Значение Counter: %zu\n", counter);
     }
+    if (strcmp(metkaStr, "") != 0) {
+        name_node *nameNode = calloc(sizeof(name_node), 1);
+        nameNode->name = metkaStr;
+        nameNode->addr = counter;
+        nameNode->tag = res->is_direct;
+        push_to_name_table(name_table, nameNode);
+        print_name_table(name_table);
+
+    }
+
+
     metkaStr = NULL;
     free(metkaStr);
     operatorStr = NULL;
@@ -334,7 +375,7 @@ void printResult(char *metkaStr, char *operatorStr, char *operandStr, char *comm
 }
 
 
-void parse_file(Hash_Table *table) {
+void parse_file(Hash_Table *table, Hash_Table *name_table) {
     int numberOfStr = 1;
     const char *pathToFile = "../program.txt";
     char *line_buf = (char *) malloc(255 * sizeof(char));
@@ -347,7 +388,7 @@ void parse_file(Hash_Table *table) {
     }
     line_size = getline(&line_buf, &line_buf_size, fp);
     while (line_size >= 0) {
-        parseString(line_buf, numberOfStr, table);
+        parseString(line_buf, numberOfStr, table, name_table);
         numberOfStr++;
         line_size = getline(&line_buf, &line_buf_size, fp);
     }
@@ -419,79 +460,10 @@ int main(void) {
     push_to_table(table, &node8);
     ////////////////////////////////////
 
-    parse_file(table);
+    Hash_Table *name_table = create_hash_table(20);
+
+
+    parse_file(table, name_table);
     return EXIT_SUCCESS;
 }
 
-
-
-
-//int main() {
-//    ////////////////////////// Создание таблицы мнемоник
-//    Hash_Table *table = create_hash_table(17);
-//    mnem_node node = {
-//            "START",
-//            1,
-//            start,
-//    };
-//    mnem_node node2 = {
-//            "END",
-//            1,
-//            end,
-//    };
-//    mnem_node node3 = {
-//            "BYTE",
-//            1,
-//            byte,
-//    };
-//
-//    mnem_node node4 = {
-//            "WORD",
-//            1,
-//            word,
-//    };
-//
-//    mnem_node node5 = {
-//            "RESW",
-//            1,
-//            resw,
-//    };
-//
-//    mnem_node node6 = {
-//            "RESB",
-//            1,
-//            resb,
-//    };
-//    non_direct_info *info1 = calloc(sizeof(non_direct_info *), 1);
-//    info1->info = 1;
-//    info1->size = 3;
-//    mnem_node node7 = {
-//            "int",
-//            0,
-//            info1,
-//    };
-//    non_direct_info *info2 = calloc(sizeof(non_direct_info *), 1);
-//    info2->info = 2;
-//    info2->size = 3;
-//    mnem_node node8 = {
-//            "move",
-//            0,
-//            info2,
-//    };
-//
-//    push_to_table(table, &node);
-//    push_to_table(table, &node2);
-//    push_to_table(table, &node3);
-//    push_to_table(table, &node4);
-//    push_to_table(table, &node5);
-//    push_to_table(table, &node6);
-//    push_to_table(table, &node7);
-//    push_to_table(table, &node8);
-//    ////////////////////////////////////
-//
-//    print_mnem_table(table);
-//
-//
-//
-//
-//}
