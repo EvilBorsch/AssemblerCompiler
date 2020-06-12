@@ -131,16 +131,32 @@ void push_to_table(Hash_Table *table, mnem_node *el) {
 }
 
 
+bool checkIfIn(unsigned int index, Hash_Table *pTable, name_node *pNode);
+
 void push_to_name_table(Hash_Table *table, name_node *el) {
     unsigned int index = hash(el->name, table->size);
+    if (checkIfIn(index, table, el)) {
+        printf("ОШИБКА Данная метка уже существует"); //TODO ЭТО ВЫВОД ОШИБКИ ПИСАТЬ В ФАЙЛ
+    }
     push_back(table->list[index], el);
+}
+
+bool checkIfIn(unsigned int index, Hash_Table *name_table, name_node *node) {
+
+    if (name_table->list[index]->el != NULL) {
+        name_node *el = (name_node *) name_table->list[index]->el->data;
+        if (strcmp(el->name, node->name) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void print_mnem_table(Hash_Table *table) {
 
     for (int i = 0; i < table->size; i++) {
         printf("%s", "index № ");
-        printf(":%d ", i);
+        printf(" %d :", i);
         list_node *node = table->list[i]->el;
         while (node != NULL) {
             mnem_node *data = (mnem_node *) node->data;
@@ -166,7 +182,7 @@ void print_name_table(Hash_Table *table) {
 
     for (int i = 0; i < table->size; i++) {
         printf("%s", "index № ");
-        printf(":%d ", i);
+        printf(" %d:", i);
         list_node *node = table->list[i]->el;
         while (node != NULL) {
             name_node *data = (name_node *) node->data;
@@ -303,6 +319,9 @@ void parseString(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *na
             if (checkIfOperatorCorrect(tempStr)) {
                 operatorStr = tempStr;
                 nextOperand = true;
+            } else {
+                printf("Данный оператор неккорректен -->"); //TODO ЭТО ВЫВОД СООБЩЕНИЯ ОБ ОШИБКЕ ПИСАТЬ ЕГО В ФАЙЛ
+                printf("%s", tempStr);
             }
             tempStr = (char *) malloc(lenOf * sizeof(char));
             continue;
@@ -460,7 +479,7 @@ int main(void) {
     push_to_table(table, &node8);
     ////////////////////////////////////
 
-    Hash_Table *name_table = create_hash_table(20);
+    Hash_Table *name_table = create_hash_table(11);
 
 
     parse_file(table, name_table);
