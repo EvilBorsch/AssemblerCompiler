@@ -334,14 +334,10 @@ void parseString(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *na
     }
     if (!isEmpty(operatorStr) && isEmpty(operandStr)) operandStr = tempStr;
     if (operatorStr == operandStr) operandStr = NULL;
-
-
     printResult(metkaStr, operatorStr, operandStr, commentStr, numOfStr);
+
     mnem_node *res = find(mnem_table, operatorStr);
-    res->worker(&counter, operandStr);
-    if (res->is_direct == 1) {
-        printf("Значение Counter: %zu\n", counter);
-    }
+
     if (strcmp(metkaStr, "") != 0) {
         name_node *nameNode = calloc(sizeof(name_node), 1);
         nameNode->name = metkaStr;
@@ -350,6 +346,11 @@ void parseString(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *na
         push_to_name_table(name_table, nameNode);
         print_name_table(name_table);
 
+    }
+
+    res->worker(&counter, operandStr);
+    if (res->is_direct == 1) {
+        printf("Значение Counter: %zu\n", counter);
     }
 
 
