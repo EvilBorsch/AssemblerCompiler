@@ -1,6 +1,13 @@
  START 1000
-st: BYTE 7
-m1: WORD 5
-m2: RESB 8
-m3: RESW 2
+st: ldx zero
+ lda dat,X
+ addx wsz
+ add dat,X
+ sta rez
+ hlt
+zero: WORD 0
+wsz: WORD 3
+rez: RESW 1
+dat: WORD 7
+ WORD 11
  END st

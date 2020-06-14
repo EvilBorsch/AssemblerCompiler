@@ -2,9 +2,14 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <ctype.h>
+
+#define NO_ZAPYAT 0
+#define IS_DIGIT -1
+
 
 const size_t wordSize = 3;
-size_t counter = 0;
+int counter = 0x0;
 
 
 typedef struct non_direct_info {
@@ -78,6 +83,24 @@ void push_back(list *l, void *new_el) {
 
 }
 
+char *substr(const char *text, int beg, int end) {
+    int i;
+    char *sub = 0;
+    int len = end - beg;
+    if (text)//Проверяем не пустой ли ввод
+        if (text + beg)//Проверяем существование в тексте позиции beg
+            if (0 < len)//Проверяем корректность параметров конец должен быть больше начала
+                if ((sub = (char *) malloc(1 + len)))//Если end превосходит последнюю
+                    //позицию текста ничего страшного выделим чуть больше памяти чем надо
+                {
+                    //Примитивное компирование, даже текстовых библиотек не надо будет
+                    for (i = beg; text[i] != '\0' && i < end; i++)
+                        sub[i - beg] = text[i];
+                    sub[i - beg] = '\0';//Ноль терминатор вконце строки
+                }
+    return sub;
+}
+
 
 unsigned int WordCombination(const char *str) {
     const unsigned VALUE_BYTES = 4;
@@ -133,10 +156,16 @@ void push_to_table(Hash_Table *table, mnem_node *el) {
 
 bool checkIfIn(unsigned int index, Hash_Table *pTable, name_node *pNode);
 
+void deletechar(char *str, int pos) {
+    int i;
+    for (i = pos; i < strlen(str); ++i)str[i] = str[i + 1];
+}
+
 void push_to_name_table(Hash_Table *table, name_node *el) {
     unsigned int index = hash(el->name, table->size);
     if (checkIfIn(index, table, el)) {
-        printf("ОШИБКА Данная метка уже существует"); //TODO ЭТО ВЫВОД ОШИБКИ ПИСАТЬ В ФАЙЛ
+
+        return;
     }
     push_back(table->list[index], el);
 }
@@ -145,9 +174,19 @@ bool checkIfIn(unsigned int index, Hash_Table *name_table, name_node *node) {
 
     if (name_table->list[index]->el != NULL) {
         name_node *el = (name_node *) name_table->list[index]->el->data;
-        if (strcmp(el->name, node->name) == 0) {
+        int equality = strcmp(el->name, node->name);
+        if (equality == 0) {
+            if (el->tag != node->tag) {
+                el->tag = 1;
+                el->addr = counter;
+            }
+            if (el->addr != node->addr) {
+                printf("ОШИБКА Данная метка уже существует"); //TODO ЭТО ВЫВОД ОШИБКИ ПИСАТЬ В ФАЙЛ
+            }
             return true;
+
         }
+        return false;
     }
     return false;
 }
@@ -188,7 +227,7 @@ void print_name_table(Hash_Table *table) {
             name_node *data = (name_node *) node->data;
             printf(" Имя %s ", data->name);
             printf(" Признак %d ", data->tag);
-            printf(" Адресс %d ", data->addr);
+            printf(" Адресс %x ", data->addr);
             if (node->next != NULL) {
                 printf("%s", "->");
             }
@@ -196,6 +235,7 @@ void print_name_table(Hash_Table *table) {
         }
         printf("\n");
     }
+    printf("\n");
 }
 
 
@@ -215,7 +255,7 @@ mnem_node *find(Hash_Table *table, char *key) {
 
 // обработчик директивы START
 void start(size_t *c, char *operand) {
-    *c = strtol(operand, NULL, 0);
+    *c = strtol(operand, NULL, 16);
 }
 
 // обработчик директивы END
@@ -253,6 +293,12 @@ void parseString(char *buf, int numOfStr, Hash_Table *pTable, Hash_Table *name_t
 void printResult(char *metkaStr, char *operatorStr, char *operandStr, char *commentStr, int numOfStr);
 
 bool checkIfOperatorCorrect(char *str);
+
+bool get_x(char *operandStr);
+
+int get_comp_command(bool x, int cop);
+
+int check_if_operand_like_metka(char *operand);
 
 char commentSymbol = ';';
 
@@ -337,22 +383,37 @@ void parseString(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *na
     printResult(metkaStr, operatorStr, operandStr, commentStr, numOfStr);
 
     mnem_node *res = find(mnem_table, operatorStr);
-
     if (strcmp(metkaStr, "") != 0) {
+        deletechar(metkaStr, strlen(metkaStr) - 1);
         name_node *nameNode = calloc(sizeof(name_node), 1);
         nameNode->name = metkaStr;
         nameNode->addr = counter;
-        nameNode->tag = res->is_direct;
+        nameNode->tag = 1;
         push_to_name_table(name_table, nameNode);
         print_name_table(name_table);
+    }
+    int zapyat_pos = check_if_operand_like_metka(operandStr);
 
+    if (zapyat_pos != IS_DIGIT && strcmp(operatorStr, "END") != 0) {
+        name_node *nameNode = calloc(sizeof(name_node), 1);
+        if (zapyat_pos == NO_ZAPYAT) {
+            nameNode->name = operandStr;
+        } else {
+            nameNode->name = substr(operandStr, 0, zapyat_pos);
+        }
+        nameNode->addr = counter;
+        nameNode->tag = 0;
+        push_to_name_table(name_table, nameNode);
+        print_name_table(name_table);
     }
 
-    res->worker(&counter, operandStr);
+
     if (res->is_direct == 1) {
-        printf("Значение Counter: %zu\n", counter);
+        res->worker(&counter, operandStr);
+    } else {
+        counter += 0x3;
     }
-
+    printf("Значение Counter: %x\n", counter);
 
     metkaStr = NULL;
     free(metkaStr);
@@ -366,10 +427,29 @@ void parseString(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *na
 
 }
 
+
+int combine(int a, int b) {
+    a = a << 16;
+    return a + b;
+}
+
+int get_comp_command(bool x, int cop) {
+    if (x == 0) {
+        return combine(cop, counter);
+    }
+    return combine(cop, counter) + 0x8000;
+}
+
+bool get_x(char *operandStr) {
+    //TODO Fix
+    return 0;
+}
+
 bool checkIfOperatorCorrect(char *str) {
     if (strcmp(str, "START") == 0 || strcmp(str, "END") == 0 || strcmp(str, "BYTE") == 0 || strcmp(str, "WORD") == 0 ||
-        strcmp(str, "RESB") == 0 || strcmp(str, "RESW") == 0 || strcmp(str, "mov") == 0 || strcmp(str, "ret") == 0 ||
-        strcmp(str, "int") == 0) {
+        strcmp(str, "RESB") == 0 || strcmp(str, "RESW") == 0 || strcmp(str, "lda") == 0 || strcmp(str, "ldx") == 0 ||
+        strcmp(str, "add") == 0 || strcmp(str, "addx") == 0 || strcmp(str, "hlt") == 0 ||
+        strcmp(str, "sta") == 0) {
         return true;
     }
     return false;
@@ -392,6 +472,23 @@ void printResult(char *metkaStr, char *operatorStr, char *operandStr, char *comm
     printDataWithMessage(" Операнд: ", operandStr);
     printDataWithMessage(" Комментарий: ", commentStr);
     printf("\n");
+}
+
+int check_if_operand_like_metka(char *operand) {
+
+    char ch = operand[0];
+    if (isdigit(ch) || strcmp(operand, "") == 0) {
+        return IS_DIGIT;
+    }
+    int i = 1;
+    while (ch != '\0') {
+        ch = operand[i];
+        if (ch == ',') {
+            return i;
+        }
+        i++;
+    }
+    return NO_ZAPYAT;
 }
 
 
@@ -419,7 +516,7 @@ void parse_file(Hash_Table *table, Hash_Table *name_table) {
 
 int main(void) {
     ////////////////////////// Создание таблицы мнемоник
-    Hash_Table *table = create_hash_table(17);
+    Hash_Table *table = create_hash_table(41);
     mnem_node node = {
             "START",
             1,
@@ -454,20 +551,56 @@ int main(void) {
             resb,
     };
     non_direct_info *info1 = calloc(sizeof(non_direct_info *), 1);
-    info1->info = 1;
+    info1->info = 0x11;
     info1->size = 3;
     mnem_node node7 = {
-            "int",
+            "add",
             0,
             info1,
     };
     non_direct_info *info2 = calloc(sizeof(non_direct_info *), 1);
-    info2->info = 2;
+    info2->info = 0x12;
     info2->size = 3;
     mnem_node node8 = {
-            "move",
+            "addx",
             0,
             info2,
+    };
+
+    non_direct_info *info3 = calloc(sizeof(non_direct_info *), 1);
+    info3->info = 0x21;
+    info3->size = 3;
+    mnem_node node9 = {
+            "lda",
+            0,
+            info3,
+    };
+
+    non_direct_info *info4 = calloc(sizeof(non_direct_info *), 1);
+    info4->info = 0x22;
+    info4->size = 3;
+    mnem_node node10 = {
+            "ldx",
+            0,
+            info4,
+    };
+
+    non_direct_info *info5 = calloc(sizeof(non_direct_info *), 1);
+    info5->info = 0x31;
+    info5->size = 3;
+    mnem_node node11 = {
+            "sta",
+            0,
+            info5,
+    };
+
+    non_direct_info *info6 = calloc(sizeof(non_direct_info *), 1);
+    info6->info = 0xf;
+    info6->size = 3;
+    mnem_node node12 = {
+            "hlt",
+            0,
+            info6,
     };
 
     push_to_table(table, &node);
@@ -478,6 +611,11 @@ int main(void) {
     push_to_table(table, &node6);
     push_to_table(table, &node7);
     push_to_table(table, &node8);
+    push_to_table(table, &node9);
+    push_to_table(table, &node10);
+    push_to_table(table, &node11);
+    push_to_table(table, &node12);
+    //print_mnem_table(table);
     ////////////////////////////////////
 
     Hash_Table *name_table = create_hash_table(11);
