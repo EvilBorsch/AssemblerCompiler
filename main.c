@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 
+
 #define NO_ZAPYAT 0
 #define IS_DIGIT -1
 
@@ -85,7 +86,12 @@ void push_back(list *l, void *new_el) {
 
 
 char *concat(char *s1, char *s2) {
-
+    // Перевод строки в 16 ричную
+    char *buffer;
+    int num = atoi(s2);
+    sprintf(buffer, "%x", num);
+    s2 = buffer;
+    //////////
     size_t len1 = strlen(s1);
     size_t len2 = strlen(s2);
 
@@ -646,6 +652,7 @@ void parseStringWithNameTable(char *buf, int numOfStr, Hash_Table *mnem_table, H
             fprintf(pFile, "Команда %s: %x\n", operatorStr, command);
         }
     } else {
+
         if (strcmp(operatorStr, "RESW") == 0) {
             char *command = get_resw_command(operandStr);
             fprintf(pFile, "Команда %s: %s\n", operatorStr, command);
