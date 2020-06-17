@@ -10,7 +10,9 @@
 
 const size_t wordSize = 3;
 int counter = 0x0;
-
+int counterArr[1000];
+int counter_start = 0;
+int counter_end = 0;
 
 typedef struct non_direct_info {
     int size;
@@ -81,6 +83,65 @@ void push_back(list *l, void *new_el) {
         node = node->next;
     }
 
+}
+
+
+char *concat(char *s1, char *s2) {
+
+
+    size_t len1 = strlen(s1);
+    size_t len2 = strlen(s2);
+
+    char *result = malloc(len1 + len2 + 1);
+
+    if (!result) {
+        fprintf(stderr, "malloc() failed: insufficient memory!\n");
+        return NULL;
+    }
+
+    memcpy(result, s1, len1);
+    memcpy(result + len1, s2, len2 + 1);
+
+    return result;
+}
+
+
+char *int_to_16_str(int dig) {
+    char *buffer = malloc(sizeof(char) * 100);
+    sprintf(buffer, "%x", dig);
+    return buffer;
+
+}
+
+char *int_to_10_str(int dig) {
+    char *buffer = malloc(sizeof(char) * 1000);
+    sprintf(buffer, "%d", dig);
+    return buffer;
+}
+
+char *concat_with_translate(char *s1, char *s2) {
+
+    // Перевод строки в 16 ричную
+    char *buffer;
+    int num = atoi(s2);
+    sprintf(buffer, "%x", num);
+    s2 = buffer;
+    //////////
+
+    size_t len1 = strlen(s1);
+    size_t len2 = strlen(s2);
+
+    char *result = malloc(len1 + len2 + 1);
+
+    if (!result) {
+        fprintf(stderr, "malloc() failed: insufficient memory!\n");
+        return NULL;
+    }
+
+    memcpy(result, s1, len1);
+    memcpy(result + len1, s2, len2 + 1);
+
+    return result;
 }
 
 char *substr(const char *text, int beg, int end) {
@@ -253,13 +314,30 @@ mnem_node *find(Hash_Table *table, char *key) {
     return NULL;
 }
 
+
+int find_addr_in_name_table(Hash_Table *table, char *key) {
+    for (int i = 0; i < table->size; i++) {
+        list_node *node = table->list[i]->el;
+        while (node != NULL) {
+            name_node *data = (name_node *) node->data;
+            if (strcmp(data->name, key) == 0) {
+                return data->addr;
+            }
+            node = node->next;
+        }
+    }
+    return 0;
+}
+
 // обработчик директивы START
 void start(size_t *c, char *operand) {
     *c = strtol(operand, NULL, 16);
+    counter_start = *c;
 }
 
 // обработчик директивы END
 void end(size_t *c, char *operand) {
+    counter_end = counter;
     printf("Первая исполняемая команда - %s\n", operand);
 }
 
@@ -296,9 +374,19 @@ bool checkIfOperatorCorrect(char *str);
 
 bool get_x(char *operandStr);
 
-int get_comp_command(bool x, int cop);
+int get_comp_command(bool x, int cop, int addr);
 
 int check_if_operand_like_metka(char *operand);
+
+void parse_file_second_time(Hash_Table *mnem_table, Hash_Table *name_table);
+
+char *get_resw_command(char *str);
+
+char *get_resb_command(char *str);
+
+char *get_word_command(char *operand);
+
+char *get_hex_command_dump(FILE *f, char *command, int command1, int counter, char *str, FILE *obj_code_f);
 
 char commentSymbol = ';';
 
@@ -390,7 +478,7 @@ void parseString(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *na
         nameNode->addr = counter;
         nameNode->tag = 1;
         push_to_name_table(name_table, nameNode);
-        print_name_table(name_table);
+        //print_name_table(name_table);
     }
     int zapyat_pos = check_if_operand_like_metka(operandStr);
 
@@ -404,16 +492,18 @@ void parseString(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *na
         nameNode->addr = counter;
         nameNode->tag = 0;
         push_to_name_table(name_table, nameNode);
-        print_name_table(name_table);
+        //print_name_table(name_table);
     }
 
+
+    counterArr[numOfStr] = counter;
 
     if (res->is_direct == 1) {
         res->worker(&counter, operandStr);
     } else {
         counter += 0x3;
     }
-    printf("Значение Counter: %x\n", counter);
+
 
     metkaStr = NULL;
     free(metkaStr);
@@ -433,17 +523,13 @@ int combine(int a, int b) {
     return a + b;
 }
 
-int get_comp_command(bool x, int cop) {
+int get_comp_command(bool x, int cop, int addr) {
     if (x == 0) {
-        return combine(cop, counter);
+        return combine(cop, addr);
     }
-    return combine(cop, counter) + 0x8000;
+    return combine(cop, addr) + 0x8000;
 }
 
-bool get_x(char *operandStr) {
-    //TODO Fix
-    return 0;
-}
 
 bool checkIfOperatorCorrect(char *str) {
     if (strcmp(str, "START") == 0 || strcmp(str, "END") == 0 || strcmp(str, "BYTE") == 0 || strcmp(str, "WORD") == 0 ||
@@ -513,6 +599,231 @@ void parse_file(Hash_Table *table, Hash_Table *name_table) {
     free(line_buf);
     fclose(fp);
 }
+
+
+void parseStringWithNameTable(char *buf, int numOfStr, Hash_Table *mnem_table, Hash_Table *name_table, FILE *pFile,
+                              FILE *obj_code_file) {
+    int i = 0;
+    const int lenOf = strlen(buf);
+    char ch;
+    if (buf[0] == '\n') {
+        printResult(NULL, NULL, NULL, NULL, numOfStr);
+        return;
+    }
+    //// нахождение метки
+    char *metkaStr = (char *) malloc(lenOf * sizeof(char));
+    if (buf[0] != ' ' && buf[0] != commentSymbol) {
+        for (i; i < lenOf; i++) {
+            ch = buf[i];
+            if (ch == ' ') break;
+            appending(metkaStr, ch);
+
+        }
+        i++;
+    }
+
+    //////////
+
+    ch = buf[i];
+    //// нахождение первого слова
+    while (ch == ' ' && i < lenOf) {
+        i++;
+        ch = buf[i];
+    }
+    ////
+
+    char *tempStr = (char *) malloc(lenOf * sizeof(char));
+    char *operatorStr = (char *) malloc(lenOf * sizeof(char));
+    char *operandStr = (char *) malloc(lenOf * sizeof(char));
+    char *commentStr = (char *) malloc(lenOf * sizeof(char));
+    bool nextOperand = false;
+    for (i; i < lenOf; i++) {
+        ch = buf[i];
+        if (ch == ' ' || ch == '\n') {
+            if (tempStr[0] == commentSymbol) {
+                commentStr = ++tempStr;
+                tempStr = (char *) malloc(lenOf * sizeof(char));
+                continue;
+            }
+            if (nextOperand) {
+                operandStr = tempStr;
+                tempStr = (char *) malloc(lenOf * sizeof(char));
+                continue;
+            }
+
+            if (checkIfOperatorCorrect(tempStr)) {
+                operatorStr = tempStr;
+                nextOperand = true;
+            } else {
+                printf("Данный оператор неккорректен -->"); //TODO ЭТО ВЫВОД СООБЩЕНИЯ ОБ ОШИБКЕ ПИСАТЬ ЕГО В ФАЙЛ
+                printf("%s", tempStr);
+            }
+            tempStr = (char *) malloc(lenOf * sizeof(char));
+            continue;
+
+        }
+        appending(tempStr, ch);
+    }
+    if (isEmpty(operatorStr) && isEmpty(operandStr)) {
+        operatorStr = tempStr;
+    }
+    if (!isEmpty(operatorStr) && isEmpty(operandStr)) operandStr = tempStr;
+    if (operatorStr == operandStr) operandStr = NULL;
+    printResult(metkaStr, operatorStr, operandStr, commentStr, numOfStr);
+
+
+    mnem_node *res = find(mnem_table, operatorStr);
+    int int_command = 0;
+    char *str_command = "";
+
+    if (res->is_direct == 0) {
+        if (strcmp(res->operator, "hlt") == 0) {
+            fprintf(pFile, "Команда hlt: 0f0000\n");
+            str_command = "0f0000";
+
+        } else {
+            int x = 0;
+            int zapyat_pos = check_if_operand_like_metka(operandStr);
+            if (zapyat_pos != NO_ZAPYAT && zapyat_pos != IS_DIGIT) {
+                x = 1;
+                operandStr = substr(operandStr, 0, zapyat_pos);
+            }
+            int COP = res->nonDirectInfo->info;
+
+            int addr = find_addr_in_name_table(name_table, operandStr);
+            int_command = get_comp_command(x, COP, addr);
+            fprintf(pFile, "Команда %s: %x\n", operatorStr, int_command);
+        }
+    } else {
+        if (strcmp(operatorStr, "RESW") == 0) {
+            str_command = get_resw_command(operandStr);
+            fprintf(pFile, "Команда %s: %s\n", operatorStr, str_command);
+        }
+
+        if (strcmp(operatorStr, "RESB") == 0) {
+            str_command = get_resb_command(operandStr);
+            fprintf(pFile, "Команда %s: %s\n", operatorStr, str_command);
+        }
+
+        if (strcmp(operatorStr, "WORD") == 0) {
+            str_command = get_word_command(operandStr);
+            fprintf(pFile, "Команда %s: %s\n ", operatorStr, str_command);
+        }
+
+    }
+    int old_counter = counterArr[numOfStr];
+
+    char *dump = get_hex_command_dump(pFile, str_command, int_command, old_counter, operatorStr, obj_code_file);
+    //printf("%d %d",counter_start,counter_end);
+    metkaStr = NULL;
+    free(metkaStr);
+    operatorStr = NULL;
+    free(operatorStr);
+    tempStr = NULL;
+    free(tempStr);
+    commentStr = NULL;
+    free(commentStr);
+    str_command = NULL;
+    free(str_command);
+
+
+}
+
+
+char *
+get_hex_command_dump(FILE *f, char *str_command, int int_command, int count, char *operator, FILE *obj_code_file) {
+    if (int_command != 0) {
+        str_command = int_to_16_str(int_command);
+    }
+    char *counter_str = int_to_16_str(count);
+    char *hex_dump = "";
+    if (strcmp(operator, "START") == 0) {
+        int program_size = counter_end - counter_start;
+        counter_str = int_to_16_str(counter_start);
+        char *program_size_str = concat("00", int_to_16_str(program_size)); //TODO cal zeros
+        char *hex_dump_raw = concat(concat(":02", counter_str), "02");
+        hex_dump = concat(concat(hex_dump_raw, program_size_str), "XX");
+
+    } else if (strcmp(operator, "END") == 0) {
+        char *counter_start_str = int_to_16_str(counter_start);
+        hex_dump = concat(concat(":00", counter_start_str), "01XX");
+
+    } else {
+        int size = strlen(str_command) / 2;
+        char *size_str = concat("0", int_to_10_str(size));
+        char *hex_dump_raw = concat(concat(concat(":", size_str), counter_str), "00");
+        hex_dump = concat(concat(hex_dump_raw, str_command), "XX");
+
+    }
+
+    fprintf(obj_code_file, "%s\n", hex_dump);
+    return NULL;
+}
+
+char *get_word_command(char *operand) {
+    const int command_size = wordSize * 2;
+    char *nulls = calloc(sizeof(char *), 1);
+    for (int i = 0; i < (command_size - 1); i++) {
+        appending(nulls, '0');
+    }
+    return concat_with_translate(nulls, operand);
+}
+
+char *get_resb_command(char *operand) {
+    int size = strtol(operand, NULL, 10);
+    char *res = calloc(sizeof(char *), 1);
+    for (int i = 0; i < size; i++) {
+        res = concat(res, "00");
+    }
+    return res;
+}
+
+char *get_resw_command(char *operand) {
+    int size = strtol(operand, NULL, 10);
+    char *res = calloc(sizeof(char *), 1);
+    for (int i = 0; i < size; i++) {
+        res = concat(res, "000000");
+    }
+    return res;
+}
+
+
+void parse_file_second_time(Hash_Table *mnem_table, Hash_Table *name_table) {
+    int numberOfStr = 1;
+    const char *pathToFile = "../program.txt";
+    const char *path_to_out_file = "../out.txt";
+    const char *path_to_obj_code_file = "../obj_code.txt";
+    char *line_buf = (char *) malloc(255 * sizeof(char));
+    size_t line_buf_size = 0;
+    ssize_t line_size;
+    FILE *fp = fopen(pathToFile, "r");
+    if (!fp) {
+        fprintf(stderr, "Error opening file '%s'\n", "program.txt");
+        return;
+    }
+    FILE *fout = fopen(path_to_out_file, "w");
+    if (!fout) {
+        fprintf(stderr, "Error opening file '%s'\n", "program.txt");
+        return;
+    }
+
+    FILE *fobj = fopen(path_to_obj_code_file, "w");
+    if (!fout) {
+        fprintf(stderr, "Error opening file '%s'\n", "program.txt");
+        return;
+    }
+
+    line_size = getline(&line_buf, &line_buf_size, fp);
+    while (line_size >= 0) {
+        parseStringWithNameTable(line_buf, numberOfStr, mnem_table, name_table, fout, fobj);
+        numberOfStr++;
+        line_size = getline(&line_buf, &line_buf_size, fp);
+    }
+    line_buf = NULL;
+    free(line_buf);
+    fclose(fp);
+}
+
 
 int main(void) {
     ////////////////////////// Создание таблицы мнемоник
@@ -622,6 +933,8 @@ int main(void) {
 
 
     parse_file(table, name_table);
+    parse_file_second_time(table, name_table);
+
     return EXIT_SUCCESS;
 }
 
